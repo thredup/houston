@@ -31,18 +31,56 @@ module Houston
       @passphrase = ENV['APN_CERTIFICATE_PASSPHRASE']
     end
 
+    def connection
+      Houston::Connection.new(@gateway_uri, @certificate, @passphrase)
+    end
+
+    def open_connection
+      @connection = Houston::Connection.new(@gateway_uri, @certificate, @passphrase)
+      @connection.open
+
+      @last_pushed_at = Time.now
+    end
+
+    def close_connection
+      if @connection
+        @connection.close
+      end
+
+      @connection = nil
+    end
+    
+    def refresh_connection
+      if !@last_pushed_at || !@connection
+        open_connection
+      elsif(@last_pushed_at < 30.seconds.ago)
+        self.close_connection
+        self.open_connection
+      end
+    end
+
     def push(*notifications)
       return if notifications.empty?
 
-      Connection.open(@gateway_uri, @certificate, @passphrase) do |connection|
-        notifications.flatten.each do |notification|
-          next unless notification.kind_of?(Notification)
-          next if notification.sent?
+      refresh_connection
 
-          connection.write(notification.message)
-          notification.mark_as_sent!
+      notifications.flatten.each do |notification|
+        next unless notification.kind_of?(Notification)
+        next if notification.sent?
+
+        begin
+          @connection.write(notification.message)
+        rescue
+          self.close_connection
+          self.open_connection
+
+          @connection.write(notification.message)
         end
+  
+        notification.mark_as_sent!
       end
+
+      @last_pushed_at = Time.now
     end
 
     def devices
