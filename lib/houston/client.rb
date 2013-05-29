@@ -53,7 +53,7 @@ module Houston
     def refresh_connection
       if !@last_pushed_at || !@connection
         open_connection
-      elsif(@last_pushed_at < 30.seconds.ago)
+      elsif(@last_pushed_at < 20.minutes.ago)
         self.close_connection
         self.open_connection
       end
